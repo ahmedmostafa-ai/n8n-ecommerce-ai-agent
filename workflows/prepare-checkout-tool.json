@@ -1,0 +1,122 @@
+{
+  "name": "TOOL - Prepare Checkout",
+  "nodes": [
+    {
+      "parameters": {
+        "workflowInputs": {
+          "values": [
+            {
+              "name": "telegram_id"
+            },
+            {
+              "name": "product_id",
+              "type": "number"
+            },
+            {
+              "name": "quantity",
+              "type": "number"
+            },
+            {
+              "name": "delivery_address"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.3,
+      "position": [
+        0,
+        0
+      ],
+      "name": "When Executed by Another Workflow"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const { telegram_id, product_id, quantity, delivery_address } = $json;\n\nconst productId = Number(product_id);\nconst qty = Number(quantity);\nconst telegramId = String(telegram_id ?? '');\n\nif (!/^\\d+$/.test(telegramId)) {\n  throw new Error('Invalid Telegram customer ID');\n}\n\nif (!Number.isSafeInteger(productId) || productId <= 0) {\n  throw new Error('Invalid product ID');\n}\n\nif (!Number.isSafeInteger(qty) || qty < 1 || qty > 20) {\n  throw new Error('Quantity must be between 1 and 20');\n}\n\nif (\n  typeof delivery_address !== 'string' ||\n  delivery_address.trim().length < 10\n) {\n  throw new Error('A valid delivery address is required');\n}\n\nreturn {\n  json: {\n    telegram_id: telegramId,\n    product_id: productId,\n    quantity: qty,\n    delivery_address: delivery_address.trim()\n  }\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        224,
+        0
+      ],
+      "name": "Validate Checkout Input"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "WITH existing_checkout AS (\n    SELECT ch.*\n    FROM checkout_sessions ch\n    JOIN customers c ON c.id = ch.customer_id\n    WHERE c.telegram_id = $1::BIGINT\n      AND ch.status = 'awaiting_confirmation'\n      AND ch.expires_at > NOW()\n    LIMIT 1\n),\nvalid_product AS (\n    SELECT id, price, stock\n    FROM products\n    WHERE id = $2::BIGINT\n      AND is_active = TRUE\n      AND stock >= $3::INTEGER\n),\nvalid_customer AS (\n    SELECT id\n    FROM customers\n    WHERE telegram_id = $1::BIGINT\n),\nnew_checkout AS (\n    INSERT INTO checkout_sessions (\n        customer_id,\n        product_id,\n        quantity,\n        delivery_address\n    )\n    SELECT\n        c.id,\n        p.id,\n        $3::INTEGER,\n        $4::TEXT\n    FROM valid_customer c\n    CROSS JOIN valid_product p\n    WHERE NOT EXISTS (\n        SELECT 1 FROM existing_checkout\n    )\n    RETURNING *\n),\nselected_checkout AS (\n    SELECT * FROM existing_checkout\n    UNION ALL\n    SELECT * FROM new_checkout\n)\nSELECT\n    ch.id AS checkout_id,\n    ch.status,\n    CASE\n        WHEN EXISTS (\n            SELECT 1\n            FROM new_checkout n\n            WHERE n.id = ch.id\n        )\n        THEN 'new_checkout'\n        ELSE 'existing_checkout'\n    END AS checkout_result,\n    ch.quantity,\n    ch.delivery_address,\n    ch.expires_at,\n    p.name AS product_name,\n    p.price AS unit_price,\n    p.price * ch.quantity AS total_amount\nFROM selected_checkout ch\nJOIN products p ON p.id = ch.product_id;",
+        "options": {
+          "queryReplacement": "={{ [\n  $('Validate Checkout Input').first().json.telegram_id,\n  $('Validate Checkout Input').first().json.product_id,\n  $('Validate Checkout Input').first().json.quantity,\n  $('Validate Checkout Input').first().json.delivery_address\n] }}"
+        }
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.8,
+      "position": [
+        672,
+        0
+      ],
+      "name": "Create Checkout Session"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE checkout_sessions\nSET status = 'expired'\nWHERE customer_id = (\n    SELECT id\n    FROM customers\n    WHERE telegram_id = $1::BIGINT\n)\nAND status = 'awaiting_confirmation'\nAND expires_at <= NOW()\nRETURNING id;",
+        "options": {
+          "queryReplacement": "={{ [$json.telegram_id] }}"
+        }
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.8,
+      "position": [
+        448,
+        0
+      ],
+      "name": "Expire Old Checkouts",
+      "alwaysOutputData": true
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "When Executed by Another Workflow": {
+      "main": [
+        [
+          {
+            "node": "Validate Checkout Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Checkout Input": {
+      "main": [
+        [
+          {
+            "node": "Expire Old Checkouts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Expire Old Checkouts": {
+      "main": [
+        [
+          {
+            "node": "Create Checkout Session",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": true
+  }
+}
