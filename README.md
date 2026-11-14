@@ -123,7 +123,30 @@ Verified scenarios include:
 - Order confirmation and inventory updates
 - Checkout cancellation
 - Idempotent confirmation behavior
+## ⚙️ Local Setup
 
+### Prerequisites
+
+- Docker and Docker Compose
+- n8n with PostgreSQL and OpenRouter support
+- PostgreSQL database
+- Telegram bot created using BotFather
+- OpenRouter API key
+- Public HTTPS endpoint for Telegram webhooks (for example, Cloudflare Tunnel)
+
+### 1. Configure the environment
+
+Clone the repository and create a local environment file:
+
+```bash
+git clone https://github.com/ahmedmostafa-ai/n8n-ecommerce-ai-agent.git
+cd n8n-ecommerce-ai-agent
+cp .env.example .env
+```
+
+Update `.env` with your own configuration values. Never commit real credentials.
+
+**Note:** The repository does not yet include a Docker Compose file. Set up n8n and PostgreSQL using your existing
 ## 🔧 Planned Improvements
 
 - Additional error handling and retry safety
