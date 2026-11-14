@@ -75,15 +75,21 @@ These mechanisms reduce the risk of duplicate orders and inconsistent inventory.
 
 ## 📂 Repository Structure
 
-```text
-n8n-ecommerce-ai-agent/
-├── README.md
-├── workflows/
-├── database/
-├── screenshots/
-├── .env.example
-└── .gitignore
-```
+## 📁 Project Files
+
+### n8n Workflows
+
+- [Main Telegram AI Agent](workflows/ecommerce-telegram-bot.json) — Handles customer messages, AI interactions, checkout confirmation, and cancellation.
+- [Prepare Checkout Tool](workflows/prepare-checkout-tool.json) — Validates purchase information and manages checkout sessions.
+- [Get Products Tool](workflows/get-products-tool-UNTESTED.json) — Product-search workflow example. Requires testing before use.
+
+### PostgreSQL Database
+
+- [Database Schema](database/schema.sql) — Database tables and relationships.
+- [Order Processing Functions](database/order_functions.sql) — Transactional order creation, checkout confirmation, cancellation, and idempotency.
+- [Database Documentation](database/README.md) — Overview of the database architecture.
+
+**Note:** Workflow exports are sanitized for public sharing. Importing them requires configuring credentials, workflow references, and the PostgreSQL database. Some setup and regression tests remain outstanding.
 
 Workflow exports, database scripts, and screenshots will be added as the repository documentation is completed.
 
