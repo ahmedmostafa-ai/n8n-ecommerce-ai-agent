@@ -1,0 +1,648 @@
+{
+  "name": "Ecommerce - Telegram Bot",
+  "nodes": [
+    {
+      "parameters": {
+        "updates": [
+          "message",
+          "callback_query"
+        ],
+        "additionalFields": {}
+      },
+      "type": "n8n-nodes-base.telegramTrigger",
+      "typeVersion": 1.5,
+      "position": [
+        -1408,
+        16
+      ],
+      "name": "Telegram Trigger"
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('Telegram Trigger').first().json.message.chat.id }}",
+        "text": "={{ $json.output }}",
+        "additionalFields": {
+          "appendAttribution": false
+        }
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        1968,
+        128
+      ],
+      "name": "Send a text message"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $('Telegram Trigger').first().json.message.text }}",
+        "options": {
+          "systemMessage": "You are a professional e-commerce sales assistant.\n\nNever mention internal tools, database queries, search attempts, workflow execution, or technical implementation details to customers.\n\nIf the first product search returns no results, try a relevant alternative search term before concluding that a product is unavailable.\n\nOnly recommend products returned by the product-search tool. Never invent products, prices, or stock quantities.\n\nKeep responses concise, natural, and customer-friendly. Suggest relevant alternatives when appropriate.\n\nORDERING RULES\n\nYou are an e-commerce shopping assistant.\n\nWhen a customer wants to purchase a product:\n1. Use get_products to identify the correct product and its product_id.\n2. Collect the quantity and complete delivery address.\n3. Do not guess missing information. Ask the customer for it.\n4. Once all required information is available, call prepare_checkout exactly once for that purchase request.\n5. Use the checkout tool result to display the product, quantity, delivery address, and total amount.\n6. Tell the customer: Reply YES to confirm your order or NO to cancel.\n7. Explain that the checkout expires after 15 minutes.\n\nIMPORTANT:\n- prepare_checkout creates a pending checkout, not an order.\n- Never claim an order is confirmed merely because a checkout was prepared.\n- Never create or confirm an order directly.\n- YES and NO are handled by the workflow, not by you.\n- Never invent product IDs, prices, stock levels, or order IDs.\n- If checkout preparation fails, explain the problem and do not request confirmation.\n\n### CHECKOUT STATE RULES\n\n- Conversation memory is NOT the source of truth for checkout or order status.\n- Never claim a checkout is pending, confirmed, cancelled, or expired based only on conversation memory.\n- Whenever a customer requests a purchase, use `prepare_checkout` to check or prepare the checkout, even if a previous checkout was discussed.\n- If `prepare_checkout` returns an existing pending checkout, show its details and request YES/NO confirmation.\n- If it returns a new checkout, show the order summary and request YES/NO confirmation.\n- Never tell a customer they have an existing pending checkout unless the tool confirms it.\n- Never claim an order was placed unless the workflow confirms it.\n\nCHECKOUT TOOL RESPONSE RULES\n\nAfter calling prepare_checkout:\n\n1. If checkout_result = \"new_checkout\":\n   - Tell the customer a NEW checkout has been prepared.\n   - Display the product, quantity, delivery address, and total.\n   - Ask the customer to reply YES or NO.\n\n2. If checkout_result = \"existing_checkout\":\n   - Tell the customer they already have an active checkout.\n   - Display the checkout details returned by the tool.\n   - Ask the customer to reply YES or NO.\n\n3. Never claim there are multiple pending checkouts\n   unless a database tool explicitly confirms this.\n\n4. Never describe a confirmed checkout as pending.\n\n5. Never invent checkout statuses, reference numbers,\n   or warnings about duplicate orders.\n\n6. If the tool fails or returns no checkout details,\n   tell the customer the checkout could not be prepared.\n   Do not ask for YES or NO."
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        1168,
+        16
+      ],
+      "name": "AI Agent",
+      "retryOnFail": true,
+      "waitBetweenTries": 2000,
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "model": "anthropic/claude-haiku-5.5",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenRouter",
+      "typeVersion": 1,
+      "position": [
+        1024,
+        384
+      ],
+      "name": "OpenRouter Chat Model"
+    },
+    {
+      "parameters": {
+        "sessionIdType": "customKey",
+        "sessionKey": "={{ $('Telegram Trigger').first().json.message.chat.id.toString() }}",
+        "contextWindowLength": 10
+      },
+      "type": "@n8n/n8n-nodes-langchain.memoryBufferWindow",
+      "typeVersion": 1.4,
+      "position": [
+        1200,
+        400
+      ],
+      "name": "Simple Memory"
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('Telegram Trigger').first().json.message.chat.id }}",
+        "text": "Sorry, something went wrong. Please try again.",
+        "additionalFields": {}
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        1984,
+        464
+      ],
+      "name": "Send a text message1"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 4
+          },
+          "conditions": [
+            {
+              "id": "2f3483e7-9b16-44c6-afc3-896efcb27244",
+              "leftValue": "={{ $json.id }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "exists",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.4,
+      "position": [
+        -704,
+        64
+      ],
+      "name": "If"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO customers (telegram_id, name)\nVALUES ($1, $2)\nON CONFLICT (telegram_id)\nDO UPDATE SET telegram_id = EXCLUDED.telegram_id\nRETURNING id, telegram_id, name;",
+        "options": {
+          "queryReplacement": "={{ [   String($('Telegram Trigger').first().json.message.chat.id),   $('Telegram Trigger').first().json.message.from.first_name || 'Customer' ] }}"
+        }
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.8,
+      "position": [
+        -496,
+        224
+      ],
+      "name": "Register New Customer"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT id, telegram_id, name\nFROM customers\nWHERE telegram_id = $1;",
+        "options": {
+          "queryReplacement": "={{ [String($('Telegram Trigger').first().json.message.chat.id)] }}"
+        }
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.8,
+      "position": [
+        -1056,
+        32
+      ],
+      "name": "Postgres Find Customer",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "\nSELECT\n    ch.id AS checkout_id,\n    ch.status,\n    ch.product_id,\n    ch.quantity,\n    ch.delivery_address,\n    ch.expires_at,\n    p.name AS product_name,\n    p.price * ch.quantity AS total_amount\nFROM checkout_sessions ch\nJOIN customers c ON c.id = ch.customer_id\nJOIN products p ON p.id = ch.product_id\nWHERE c.telegram_id = $1::BIGINT\n  AND ch.status = 'awaiting_confirmation'\n  AND ch.expires_at > NOW()\nORDER BY ch.created_at DESC, ch.id DESC\nLIMIT 1;\n",
+        "options": {
+          "queryReplacement": "={{ [$('Telegram Trigger').first().json.message.from.id] }}"
+        }
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.8,
+      "position": [
+        -240,
+        48
+      ],
+      "name": "Check Active Checkout",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 4
+          },
+          "conditions": [
+            {
+              "id": "464ac7d2-c00b-447f-ba64-847003ec17ac",
+              "leftValue": "={{ !!$json.checkout_id && ['YES', 'NO'].includes($('Telegram Trigger').first().json.message.text?.trim().toUpperCase()) }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.4,
+      "position": [
+        48,
+        32
+      ],
+      "name": "IF Checkout Reply"
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 4
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ String($('Telegram Trigger').first().json.message.text ?? '').trim().toUpperCase() }}",
+                    "rightValue": "YES",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "d4dccd47-c076-4bd7-b275-73507685e4a3"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Confirm"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 4
+                },
+                "conditions": [
+                  {
+                    "id": "b5cd1226-9194-4445-aa0b-0675c6826025",
+                    "leftValue": "={{ String($('Telegram Trigger').first().json.message.text ?? '').trim().toUpperCase() }}",
+                    "rightValue": "NO",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Cancel"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.5,
+      "position": [
+        496,
+        -288
+      ],
+      "name": "Checkout Decision"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT *\nFROM confirm_ecommerce_checkout(\n    $1::uuid,\n    $2::text\n);",
+        "options": {
+          "queryReplacement": "={{ [   $('Check Active Checkout').first().json.checkout_id,   $('Telegram Trigger').first().json.message.from.id.toString() ] }}"
+        }
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.8,
+      "position": [
+        752,
+        -448
+      ],
+      "name": "Confirm Checkout"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT *\nFROM cancel_ecommerce_checkout(\n    $1::uuid,\n    $2::text\n);",
+        "options": {
+          "queryReplacement": "={{ [   $('Check Active Checkout').first().json.checkout_id,   $('Telegram Trigger').first().json.message.from.id.toString() ] }}"
+        }
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.8,
+      "position": [
+        752,
+        -208
+      ],
+      "name": "Cancel Checkout"
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('Telegram Trigger').first().json.message.chat.id }}",
+        "text": "={{ '✅ Order confirmed!\\n\\nOrder #' + $json.order_id + '\\nTotal: $' + $json.order_total + '\\nStatus: ' + $json.order_status + '\\n\\nThank you for your order!' }}",
+        "additionalFields": {}
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        1168,
+        -432
+      ],
+      "name": "Send Order Confirmation"
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('Telegram Trigger').first().json.message.chat.id }}",
+        "text": "={{ $json.checkout_status === 'cancelled'\n  ? '❌ Your checkout has been cancelled.\\n\\nNo order was placed. You can start a new order anytime!'\n  : '⌛ Your checkout has expired. Please start a new order.' }}",
+        "additionalFields": {}
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        1152,
+        -224
+      ],
+      "name": "Send Cancellation Message"
+    },
+    {
+      "parameters": {
+        "description": "Creates a pending checkout for a customer after collecting the product, quantity and delivery address. Does not place an order.",
+        "workflowId": {
+          "__rl": true,
+          "value": "",
+          "mode": "list",
+          "cachedResultName": "TOOL - Prepare Checkout"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "telegram_id": "={{ String($('Telegram Trigger').first().json.message.from.id) }}",
+            "product_id": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('product_id', ``, 'number') }}",
+            "quantity": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('quantity', ``, 'number') }}",
+            "delivery_address": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('delivery_address', ``, 'string') }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "telegram_id",
+              "displayName": "telegram_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "product_id",
+              "displayName": "product_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "number"
+            },
+            {
+              "id": "quantity",
+              "displayName": "quantity",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "number"
+            },
+            {
+              "id": "delivery_address",
+              "displayName": "delivery_address",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.toolWorkflow",
+      "typeVersion": 2.2,
+      "position": [
+        1344,
+        384
+      ],
+      "name": "prepare_checkout"
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "",
+          "mode": "list",
+          "cachedResultName": "TOOL - Get Products"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "search": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('search', ``, 'string') }}",
+            "max_price": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('max_price', ``, 'number') }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "search",
+              "displayName": "search",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "max_price",
+              "displayName": "max_price",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "number",
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.toolWorkflow",
+      "typeVersion": 2.2,
+      "position": [
+        1504,
+        384
+      ],
+      "name": "Get Products"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Telegram Trigger": {
+      "main": [
+        [
+          {
+            "node": "Postgres Find Customer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent": {
+      "main": [
+        [
+          {
+            "node": "Send a text message",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Send a text message1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenRouter Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Simple Memory": {
+      "ai_memory": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_memory",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If": {
+      "main": [
+        [
+          {
+            "node": "Check Active Checkout",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Register New Customer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Register New Customer": {
+      "main": [
+        [
+          {
+            "node": "Check Active Checkout",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Postgres Find Customer": {
+      "main": [
+        [
+          {
+            "node": "If",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Active Checkout": {
+      "main": [
+        [
+          {
+            "node": "IF Checkout Reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF Checkout Reply": {
+      "main": [
+        [
+          {
+            "node": "Checkout Decision",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "AI Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Checkout Decision": {
+      "main": [
+        [
+          {
+            "node": "Confirm Checkout",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Cancel Checkout",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Confirm Checkout": {
+      "main": [
+        [
+          {
+            "node": "Send Order Confirmation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Cancel Checkout": {
+      "main": [
+        [
+          {
+            "node": "Send Cancellation Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "prepare_checkout": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Products": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": true
+  },
+  "nodeGroups": [],
+  "tags": []
+}
