@@ -17,7 +17,26 @@ Instead of allowing the AI model to directly execute purchases, the system uses 
 - **Checkout Expiration:** Checkout sessions expire after 15 minutes.
 - **Inventory Management:** Product stock is updated when an order is successfully created.
 - **Idempotent Order Processing:** PostgreSQL functions prevent repeated confirmation of the same checkout from creating duplicate orders.
+  
+## 📸 Project Screenshots
 
+### Main n8n Workflow
+
+The main workflow handles incoming Telegram messages, customer registration, AI Agent interactions, and checkout confirmation or cancellation.
+
+![Main n8n Workflow](screenshots/main-workflow.png)
+
+### Telegram Shopping Assistant
+
+Customers can search for products, prepare a checkout, and confirm their orders through Telegram.
+
+![Telegram Checkout Conversation](screenshots/telegram-checkout.png)
+
+### PostgreSQL Order Verification
+
+Successful checkout confirmation creates an order in PostgreSQL and updates product inventory.
+
+![PostgreSQL Order Verification](screenshots/order-verification.png)
 ## 🛠️ Tech Stack
 
 | Technology | Purpose |
